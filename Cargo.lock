@@ -47,7 +47,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "art_li_fight"
+name = "artifical_life_fight"
 version = "0.1.0"
 dependencies = [
  "egui",
