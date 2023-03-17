@@ -95,7 +95,11 @@ async fn main() {
                 }
 
                 // Add a speed slider
-                ui.add(egui::Slider::new(&mut speed, 0.01..=10.0).text("Speed").step_by(rewind_interval as f64));
+                ui.add(
+                    egui::Slider::new(&mut speed, 0.01..=10.0)
+                        .text("Speed")
+                        .step_by(rewind_interval as f64),
+                );
 
                 ui.add(egui::Slider::new(&mut slider_value, 0..=max_buffer_index).text("Time"));
 
