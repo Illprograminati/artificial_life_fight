@@ -205,7 +205,7 @@ async fn main() {
 
                 ui.add(egui::Slider::new(&mut slider_value, 0..=max_buffer_index).text("Time"));
 
-                if cfg!(not(wasm)) {
+                if cfg!(not(target_family="wasm")) {
                     if ui.button("Save").clicked() {
                         save_simulation_state(&state, "simulation_state.json");
                     }
