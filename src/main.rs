@@ -205,11 +205,13 @@ async fn main() {
 
                 ui.add(egui::Slider::new(&mut slider_value, 0..=max_buffer_index).text("Time"));
 
-                if ui.button("Save").clicked() {
-                    save_simulation_state(&state, "simulation_state.json");
-                }
-                if ui.button("Load").clicked() {
-                    state = load_simulation_state("simulation_state.json");
+                if cfg!(not(wasm)) {
+                    if ui.button("Save").clicked() {
+                        save_simulation_state(&state, "simulation_state.json");
+                    }
+                    if ui.button("Load").clicked() {
+                        state = load_simulation_state("simulation_state.json");
+                    }
                 }
                 if ui.button("focus").clicked() {
                     camera.target = vec2(50.0, 50.0);
