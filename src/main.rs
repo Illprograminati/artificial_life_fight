@@ -109,7 +109,7 @@ async fn main() {
         let dt = get_frame_time() * speed;
 
         let current_mouse_position = mouse_position();
-        if is_mouse_button_down(MouseButton::Right) {
+        if is_mouse_button_down(MouseButton::Left) {
             let mouse_delta = vec2(
                 current_mouse_position.0 - old_mouse_position.0,
                 old_mouse_position.1 - current_mouse_position.1,
