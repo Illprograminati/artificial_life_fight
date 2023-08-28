@@ -3,14 +3,9 @@ name = "artifical_life_fight"
 version = "0.1.0"
 edition = "2021"
 
-# [lib]
-# crate-type = ["cdylib", "rlib"]
-
 [dependencies]
-egui = "0.21.0"
-egui-macroquad = "0.15.0"
-macroquad = "0.3"
-macroquad-canvas-2d = "0.2.3"
+notan = "0.9.5"
+
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
@@ -21,3 +16,4 @@ opt-level = "s"
 # Set the default for dependencies.
 [profile.dev.package."*"]
 opt-level = 2
+

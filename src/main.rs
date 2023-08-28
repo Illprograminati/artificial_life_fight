@@ -1,238 +1,196 @@
-use serde::{Deserialize, Serialize};
+use notan::draw::*;
+use notan::prelude::*;
+use std::convert::TryInto;
 
-const HEIGHT: i32 = 1080;
-const WIDTH: i32 = 1920;
+const WIDTH: usize = 100;
+const HEIGHT: usize = 100;
+const BYTES_LENGTH: usize = WIDTH * HEIGHT * 4;
 
-#[derive(Clone, Serialize, Deserialize)]
-struct SimulationState {
-    entities: Vec<Entity>,
-    time: f64,
+#[derive(AppState)]
+struct State {
+    texture: Texture,
+    current_bytes: [u8; BYTES_LENGTH],
+    previous_bytes: [u8; BYTES_LENGTH],
+    count: f32,
+    dirty: bool,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-struct Entity {
-    x: f32,
-    y: f32,
-    // Other properties specific to your artificial life simulation
-}
-
-fn update_simulation(state: &mut SimulationState, dt: f32) {
-    for entity in &mut state.entities {
-        match rand::gen_range(1, 5) {
-            1 => entity.x -= 1.0,
-            2 => entity.x += 1.0,
-            3 => entity.y -= 1.0,
-            _ => entity.y += 1.0,
-        }
-    }
-}
-
-fn save_simulation_state(state: &SimulationState, file_path: &str) {
-    let json = serde_json::to_string_pretty(state).unwrap();
-    std::fs::write(file_path, json).expect("Failed to save the simulation state.");
-}
-
-fn load_simulation_state(file_path: &str) -> SimulationState {
-    let json = std::fs::read_to_string(file_path).expect("Failed to read the simulation state.");
-    serde_json::from_str(&json).expect("Failed to parse the simulation state.")
-}
-
-use egui_macroquad::*;
-use macroquad::{prelude::*, rand};
-
-pub fn draw_grid_2d(slices: u32, spacing: f32, axes_color: Color, other_color: Color) {
-    let half_slices = (slices as i32) / 2;
-    for i in -half_slices..half_slices + 1 {
-        let color = if i == 0 { axes_color } else { other_color };
-
-        draw_line(
-            i as f32 * spacing,
-            -half_slices as f32 * spacing,
-            i as f32 * spacing,
-            half_slices as f32 * spacing,
-            0.1,
-            color,
-        );
-        draw_line(
-            -half_slices as f32 * spacing,
-            i as f32 * spacing,
-            half_slices as f32 * spacing,
-            i as f32 * spacing,
-            0.1,
-            color,
-        );
-    }
-}
-
-#[macroquad::main("Artificial Life Simulation")]
-async fn main() {
-    let mut state = SimulationState {
-        entities: Vec::new(),
-        time: 0.0,
-    };
-
-    // Initialize entities
-    state.entities = vec![Entity::new(50.0, 50.0)];
-
-    let mut paused = false;
-    let mut speed = 1.0;
-    let rewind_interval = 0.5; // Store the state every 0.5 seconds
-    let mut elapsed_time = 0.0;
-    let mut rewind_buffer = Vec::<SimulationState>::new();
-
-    let mut slider_value = 0;
-    let mut max_buffer_index = 0;
-    let mut current_index = 0;
-
-    let min_zoom = vec2(0.008, 0.008);
-    let max_zoom = vec2(0.2, 0.2);
-
-    let mut camera = Camera2D {
-        zoom: vec2(0.01, 0.01),
-        target: vec2(50.0, 50.0),
-        ..Default::default()
-    };
-
-    let move_speed = 0.001;
-    let zoom_speed = 0.001;
-
-    let circle_size = 1.0;
-    let half_circle_size = circle_size / 2.0;
-
-    // push initial state
-    rewind_buffer.push(state.clone());
-
-    let mut old_mouse_position = mouse_position();
-
-    loop {
-        // Process user input and update the simulation
-        let dt = get_frame_time() * speed;
-
-        let current_mouse_position = mouse_position();
-        if is_mouse_button_down(MouseButton::Left) {
-            let mouse_delta = vec2(
-                current_mouse_position.0 - old_mouse_position.0,
-                old_mouse_position.1 - current_mouse_position.1,
-            );
-            camera.target += mouse_delta * (-1.0 / camera.zoom) * move_speed;
-        }
-        old_mouse_position = current_mouse_position;
-
-        // move the camera with arrow keys
-        if is_key_down(KeyCode::Right) {
-            camera.target.x += move_speed / camera.zoom.x;
-        }
-        if is_key_down(KeyCode::Left) {
-            camera.target.x -= move_speed / camera.zoom.x;
-        }
-        if is_key_down(KeyCode::Up) {
-            camera.target.y -= move_speed / camera.zoom.y;
-        }
-        if is_key_down(KeyCode::Down) {
-            camera.target.y += move_speed / camera.zoom.y;
-        }
-
-        // zoom in and out with mouse wheel
-        let scroll = mouse_wheel().1;
-        if scroll != 0.0 {
-            let mouse_world_pos = camera.screen_to_world(mouse_position().into());
-            // camera.offset = mouse_position().into();
-            camera.target = mouse_world_pos;
-            camera.zoom += zoom_speed * scroll.signum();
-            camera.zoom = camera.zoom.clamp(min_zoom, max_zoom);
-        }
-
-        if !paused {
-            elapsed_time += dt;
-
-            // Store the state in fixed intervals
-            if elapsed_time >= rewind_interval {
-                if current_index != max_buffer_index {
-                    current_index = max_buffer_index;
-                    state = rewind_buffer[slider_value].clone();
-                }
-
-                update_simulation(&mut state, dt);
-                rewind_buffer.push(state.clone());
-
-                max_buffer_index = rewind_buffer.len() - 1;
-
-                // Add a slider to control the simulation time
-                slider_value = max_buffer_index;
-
-                current_index += 1;
-                elapsed_time = 0.0;
-            }
-        } else {
-            // Update the simulation state based on the slider value
-            if slider_value < rewind_buffer.len() {
-                state = rewind_buffer[slider_value].clone();
-                current_index = slider_value;
-            }
-        }
-
-        clear_background(WHITE);
-
-        push_camera_state();
-        set_camera(&camera);
-
-        draw_grid_2d(20000, 1., BLACK, GRAY);
-
-        for entity in &state.entities {
-            draw_circle(
-                entity.x + half_circle_size,
-                entity.y + half_circle_size,
-                half_circle_size,
-                BLUE,
-            ); // Draw each entity as a blue circle
-        }
-
-        pop_camera_state();
-
-        // EGUI interface
-        egui_macroquad::ui(|egui_ctx| {
-            egui::panel::TopBottomPanel::top("menu").show(egui_ctx, |ui| {
-                if ui.button("Pause/Resume").clicked() {
-                    paused = !paused;
-                }
-
-                // Add a speed slider
-                ui.add(
-                    egui::Slider::new(&mut speed, 0.01..=10.0)
-                        .text("Speed")
-                        .step_by(rewind_interval as f64),
-                );
-
-                ui.add(egui::Slider::new(&mut slider_value, 0..=max_buffer_index).text("Time"));
-
-                if cfg!(not(target_family="wasm")) {
-                    if ui.button("Save").clicked() {
-                        save_simulation_state(&state, "simulation_state.json");
-                    }
-                    if ui.button("Load").clicked() {
-                        state = load_simulation_state("simulation_state.json");
+impl State {
+    fn is_alive(&self, x: usize, y: usize) -> bool {
+        let neighbors = get_neighbors(x as _, y as _);
+        let count = neighbors.iter().fold(0, |sum, (x, y)| {
+            let idx = index(*x, *y);
+            match idx {
+                Some(idx) => {
+                    let is_red =
+                        is_red_color(&self.previous_bytes[idx..idx + 4].try_into().unwrap());
+                    if is_red {
+                        sum + 1
+                    } else {
+                        sum
                     }
                 }
-                if ui.button("focus").clicked() {
-                    camera.target = vec2(50.0, 50.0);
-                }
-            });
-            egui::panel::TopBottomPanel::bottom("debug").show(egui_ctx, |ui| {
-                ui.add(egui::Label::new(format!("Zoom  : {}", camera.zoom.x)));
-                ui.add(egui::Label::new(format!("Target: {}", camera.target)));
-                ui.add(egui::Label::new(format!("Offset: {}", camera.offset)));
-            });
+                _ => sum,
+            }
         });
 
-        egui_macroquad::draw();
+        let was_alive = match index(x as _, y as _) {
+            Some(idx) => is_red_color(&self.previous_bytes[idx..idx + 4].try_into().unwrap()),
+            _ => false,
+        };
 
-        // End the frame and update the window
-        next_frame().await;
+        if was_alive {
+            count == 2 || count == 3
+        } else {
+            count == 3
+        }
+    }
+
+    fn swap_data(&mut self) {
+        std::mem::swap(&mut self.current_bytes, &mut self.previous_bytes);
+        self.dirty = true;
+    }
+
+    fn set_color(&mut self, color: Color, x: usize, y: usize) {
+        if let Some(idx) = index(x as _, y as _) {
+            self.current_bytes[idx..idx + 4].copy_from_slice(&color.rgba_u8());
+        }
     }
 }
 
-impl Entity {
-    fn new(x: f32, y: f32) -> Self {
-        Entity { x, y }
+#[notan_main]
+fn main() -> Result<(), String> {
+    let width = WIDTH * 4;
+    let height = HEIGHT * 4;
+
+    let win_config = WindowConfig::new().size(width as _, height as _);
+
+    notan::init_with(setup)
+        .initialize(init)
+        .add_config(win_config)
+        .add_config(DrawConfig)
+        .update(update)
+        .draw(draw)
+        .build()
+}
+
+fn setup(gfx: &mut Graphics) -> State {
+    let current_bytes = [255; BYTES_LENGTH];
+    let previous_bytes = current_bytes;
+
+    let texture = gfx
+        .create_texture()
+        .from_bytes(&current_bytes, WIDTH as _, HEIGHT as _)
+        .build()
+        .unwrap();
+
+    State {
+        texture,
+        current_bytes,
+        previous_bytes,
+        count: 0.0,
+        dirty: false,
     }
 }
+
+fn init(state: &mut State) {
+    let mut rng = Random::default();
+    for _ in 0..500 {
+        let x = rng.gen_range(0..WIDTH);
+        let y = rng.gen_range(0..HEIGHT);
+
+        let neighbors = get_neighbors(x as _, y as _);
+        neighbors.iter().for_each(|(x, y)| {
+            let valid_coords = index(*x, *y).is_some();
+            if valid_coords {
+                state.set_color(Color::RED, *x as _, *y as _);
+            }
+        });
+    }
+
+    state.swap_data();
+}
+
+const STEP_SIZE: f32 = 0.05;
+
+#[cfg(target_arch = "wasm32")]
+fn check_for_exit(app: &mut App) {}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn check_for_exit(app: &mut App) {
+    if app.keyboard.is_down(KeyCode::Escape) {
+        app.exit();
+    }
+}
+
+fn update(app: &mut App, state: &mut State) {
+    state.count += app.timer.delta_f32();
+
+    while state.count >= STEP_SIZE {
+        state.count -= STEP_SIZE;
+
+        for y in 0..HEIGHT {
+            for x in 0..WIDTH {
+                let color = if state.is_alive(x, y) {
+                    Color::RED
+                } else {
+                    Color::WHITE
+                };
+
+                state.set_color(color, x, y);
+            }
+        }
+
+        state.swap_data();
+    }
+
+    check_for_exit(app);
+}
+
+fn draw(gfx: &mut Graphics, state: &mut State) {
+    // Update the texture with the new data
+    if state.dirty {
+        gfx.update_texture(&mut state.texture)
+            .with_data(&state.current_bytes)
+            .update()
+            .unwrap();
+
+        state.dirty = false;
+    }
+
+    // Draw the texture using the draw 2d API for convenience
+    let mut draw = gfx.create_draw();
+    draw.clear(Color::BLACK);
+    draw.image(&state.texture).scale(4.0, 4.0);
+    gfx.render(&draw);
+}
+
+fn index(x: isize, y: isize) -> Option<usize> {
+    if x < 0 || y < 0 {
+        return None;
+    }
+
+    let x = x as usize;
+    let y = y as usize;
+    let index = ((y * WIDTH) + x) * 4;
+    if index >= BYTES_LENGTH {
+        None
+    } else {
+        Some(index)
+    }
+}
+
+#[inline]
+fn is_red_color(bytes: &[u8; 4]) -> bool {
+    bytes == &[255, 0, 0, 255]
+}
+
+#[rustfmt::skip]
+fn get_neighbors(ix: isize, iy: isize) -> [(isize, isize); 8] {
+    [
+        (ix - 1, iy - 1), (ix, iy - 1), (ix + 1, iy - 1),
+        (ix - 1, iy),                   (ix + 1, iy),
+        (ix - 1, iy + 1), (ix, iy + 1), (ix + 1, iy + 1),
+    ]
+}
+
